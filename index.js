@@ -15,7 +15,9 @@ const puppeteer = require('puppeteer');
     headless: false
   }));
   const page = await browser.newPage();
-  await page.goto('https://www.icourse163.org/');
+  console.log('开始爬取');
+  
+  await page.goto('https://www.icourse163.org/learn/scnu-1207440802#/learn/forumdetail?pid=1309584543');
 //   await page.screenshot({
 //     path: 'jianshu.png',
 //     type: 'png',
@@ -29,13 +31,18 @@ const puppeteer = require('puppeteer');
 //     //   height: 40
 //     // }
 //   });
-  fs.writeFileSync('test.txt', new Buffer(await page.content()), {flag: 'a'}, err => {
-      if (err) {
-          console.log('错误：', err);
-      } else {
-          console.log('写入成功');
-          
-      }
-  })
+console.log('开始写入');
+let detail = await page.$('.m-detailInfoItem')
+
+fs.writeFileSync('test.txt', detail, {flag: 'a'}, err => {
+    if (err) {
+        console.log('错误：', err);
+    } else {
+        console.log('写入成功');
+        
+    }
+})
+console.log('完成写入');
+  
   browser.close();
 })();
