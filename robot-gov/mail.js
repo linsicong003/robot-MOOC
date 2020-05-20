@@ -1,6 +1,5 @@
 const nodemailer = require('nodemailer');
-const mailList = ['linsicong003@163.com']
-// const mailList = ['linsicong003@163.com', '254026695@qq.com']
+const mailList = ['linsicong003@163.com', '254026695@qq.com']
 
 
 module.exports = (text, subject) => {
