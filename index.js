@@ -1,3 +1,11 @@
+/**
+ * 中国大学 MOOC 讨论区爬虫
+ * 移动学习理论、技术与实践
+ *
+ * @author ClancyLin
+ * @date 2020-05-22
+ */
+
 const fs = require('fs')
 const puppeteer = require('puppeteer');
 
@@ -28,62 +36,34 @@ const puppeteer = require('puppeteer');
 
   // 获取所有主题讨论
   const allTopic = await getAllTopic(page)
-
-  // 遍历主题获取主题里的所有帖子
-  let nowTopic = allTopic.postList[1]
-
-  await page.goto(nowTopic.url);
-  // await page.waitForNavigation()
-  console.log('开始爬帖子');
-  await page.waitForSelector('.m-basepool .m-data-lists>.f-pr')
   
-  // 获取当前页的所有帖子（评论也当帖子）
-  // 帖子类型 type 1 普通帖子 2 评论回复贴
-  // let post = await page.$$eval('.m-basepool .m-data-lists>.f-pr', list => {
-  //   return list.map(one => {
-  //     const content = one.querySelector('.m-detailInfoItem .j-content')
-  //     console.log(content);
-  //     return {
-  //       content: content.innerHTML
-  //     }
-  //   })
-  // })
-  let post = await page.$$eval('.m-basepool .m-data-lists>.f-pr',  (list) => {
-    // 解析日期，将所有日期解析成 yyyy-x-xx的格式
-    const parseDate = (str) => {
-      let now = new Date(),
-      nowYear = now.getFullYear(),
-      nowMonth = now.getMonth() + 1,
-      nowDay = now.getDate()
-      // 当天
-      if (str.indexOf(':') > -1) return `${nowYear}-${nowMonth}-${nowDay}`
-      // 当年
-      if (str.indexOf('月') > -1) {
-        let tmp = str.split('月')
-        let mon = tmp[0]
-        let day = tmp[1].split('日')[0]
-        return `${nowYear}-${mon}-${day}`
-      }
-      // 否则是符合格式的
-      return str
-    }
-    
-    const one = list[0]
-    return {
-      content: one.querySelector('.m-detailInfoItem .j-content').innerText,
-      author: one.querySelector('.m-detailInfoItem .f-fcgreen').getAttribute('title'),
-      date: parseDate(one.querySelector('.m-detailInfoItem .j-time').innerText),
-      favour: one.querySelector('.m-detailInfoItem .j-num').innerText
-    }
-  })
-  console.log(post)
+  // 遍历主题获取主题里的所有帖子
+  // 所有帖子
+  console.log('开始爬帖子');
 
+  // 遍历主题获取每个主题下的帖子
+  const newList = []
+  await page.goto(allTopic.topicList[4].url)
+  let allPost = await getAllPost(page)
+  // for (let nowTopic of allTopic.topicList) {
+  //   await page.waitFor(1000)
+  //   await page.goto(nowTopic.url)
+  //   // await page.waitForNavigation()
+  //   await page.waitForSelector('.m-basepool .j-list')
+  
+  //   let allPost = await getAllPost(page)
+  //   nowTopic.children = allPost
+  
+  //   newList.push(nowTopic)
+  // }
+  // console.log(newList);
+  
   // 关闭浏览器实例
-  await browser.close()
+  // await browser.close()
 })();
 
 // 爬取当页所有标题
-const getNowPagePost = async (page, list) => {
+const getNowPageTopic = async (page, list) => {
   let txt = await page.$$eval('.u-forumlistwrap .u-forumli', list => {
     return list.map( one => {
       const title = one.querySelector('.j-link')
@@ -110,7 +90,7 @@ const getAllTopic = async (page) => {
 
   // 读取该页获取话题信息
   // 第一页直接读取
-  titleList = await getNowPagePost(page, titleList)
+  titleList = await getNowPageTopic(page, titleList)
 
   // 下一页按钮
   const nextBtn = await page.$('.znxt')
@@ -120,7 +100,7 @@ const getAllTopic = async (page) => {
   while(!nextBtnClass.includes('js-disabled')) {
     await nextBtn.click()
     await page.waitForSelector('.u-forumlistwrap .u-forumli')
-    titleList = await getNowPagePost(page, titleList)
+    titleList = await getNowPageTopic(page, titleList)
     pageCount++
     nextBtnClass = await page.$eval('.znxt', btn => btn.className.split(' '))
   }
@@ -131,9 +111,119 @@ const getAllTopic = async (page) => {
 
   // 返回数据
   return {
-    postList: titleList,
+    topicList: titleList,
     totalPage: pageCount,
     totalPost: titleList.length
   }
 }
 
+// 获取当前页的所有帖子（评论帖子放在comment属性下）
+// 帖子类型 type 1 普通帖子 2 评论回复贴
+const getNowPagePost = async (page) => {
+  let post = await page.$$eval('.m-basepool .m-data-lists>.f-pr',  (list) => {
+    // 如果没有评论则填充空数组
+    if (list.length === 0) return []
+    
+    // 解析日期，将所有日期解析成 yyyy-x-xx的格式
+    const parseDate = (str) => {
+      let now = new Date(),
+      nowYear = now.getFullYear(),
+      nowMonth = now.getMonth() + 1,
+      nowDay = now.getDate()
+      // 当天
+      if (str.indexOf(':') > -1) return `${nowYear}-${nowMonth}-${nowDay}`
+      // 当年
+      if (str.indexOf('月') > -1) {
+        let tmp = str.split('月')
+        let mon = tmp[0]
+        let day = tmp[1].split('日')[0]
+        return `${nowYear}-${mon}-${day}`
+      }
+      // 否则是符合格式的
+      return str
+    }
+
+    // 使用名字+内容前十个字的hash来生成id
+    const hashCode = (s) => {
+      return s.split("").reduce(function(a,b){a=((a<<5)-a)+b.charCodeAt(0);return a&a},0);              
+    }
+
+    return list.map( one => {
+      // 当次爬出的帖子
+      let tmp = {}
+      
+      // 生成普通帖子
+      const content = one.querySelector('.m-detailInfoItem .j-content').innerText
+      const author = one.querySelector('.m-detailInfoItem .f-fcgreen').getAttribute('title')
+      const date = parseDate(one.querySelector('.m-detailInfoItem .j-time').innerText)
+      const favour = one.querySelector('.m-detailInfoItem .j-num').innerText
+      const id = String(Math.abs(hashCode(date + content.substr(0, 10))))
+      tmp = { content, author, date, favour, id, type: 1 }
+  
+      // 查找有无评论帖，评论贴比普通帖子多 fatherId：评论的帖子ID
+      // 生成评论帖子
+      const commentWrap = one.querySelector('.m-commentWrapper')
+      let commentSearchList = []
+  
+      console.log(commentWrap);
+      
+      // 存在评论区才爬
+      if (commentWrap) {
+        const commentList = commentWrap.querySelectorAll('.m-detailInfoItem')
+        commentList.forEach(item => {
+          const commentContent = item.querySelector('.m-detailInfoItem .j-content').innerText
+          const commentAuthor = item.querySelector('.m-detailInfoItem .f-fcgreen').getAttribute('title')
+          const commentDate = parseDate(item.querySelector('.m-detailInfoItem .j-time').innerText)
+          const commentFavour = item.querySelector('.m-detailInfoItem .j-num').innerText
+          const commentId = id + String(Math.abs(hashCode(date + content.substr(0, 10))))
+          commentSearchList.push({ 
+            content: commentContent, 
+            author: commentAuthor, 
+            date: commentDate, 
+            favour: commentFavour, 
+            id: commentId, 
+            fatherId: id, 
+            type: 2
+          })
+        })
+      }
+      tmp.comment = commentSearchList
+
+      // 返回该条评论
+      return tmp
+    })
+  })
+  return post
+}
+
+// 获取所有帖子
+// 并将其挂载在主题下
+const getAllPost = async (page) => {
+  // 爬取帖子总列表
+  let allPostList = []
+  // 总页数
+  let pageCount = 1
+  
+  // 读取该页获取帖子信息
+  // 第一页直接读取
+  allPostList = allPostList.concat(await getNowPagePost(page))
+
+  // 下一页按钮
+  const btnList = await page.$$('.znxt')
+  const nextBtn = await btnList[btnList.length-1]
+  let nextBtnClass = await page.$$eval('.znxt', btnList => btnList[btnList.length-1].className.split(' '))
+
+  // 如果下一页还可以按的话就按下一页
+  while(!nextBtnClass.includes('js-disabled')) {
+    await nextBtn.click()
+    await page.waitForSelector('.m-basepool .j-list')
+    await page.waitFor(1000)
+
+    allPostList = allPostList.concat(await getNowPagePost(page))
+    pageCount++
+    nextBtnClass = await page.$$eval('.znxt', btnList => btnList[btnList.length-1].className.split(' '))
+  }
+  
+  console.log(`当前主题爬取完成，总共${pageCount}页！共有帖子${allPostList.length}条！`)
+  return allPostList
+}
