@@ -3,7 +3,7 @@
  * 移动学习理论、技术与实践
  *
  * @author ClancyLin
- * @date 2020-05-22
+ * @date 2020-05-23
  */
 
 const fs = require('fs')
@@ -35,7 +35,7 @@ const puppeteer = require('puppeteer');
   await page.goto('https://www.icourse163.org/learn/scnu-1207440802#/learn/forumindex');
 
   // 获取所有主题讨论
-  const allTopic = await getAllTopic(page)
+  let allTopic = await getAllTopic(page)
   
   // 遍历主题获取主题里的所有帖子
   // 所有帖子
@@ -43,23 +43,30 @@ const puppeteer = require('puppeteer');
 
   // 遍历主题获取每个主题下的帖子
   const newList = []
-  await page.goto(allTopic.topicList[4].url)
-  let allPost = await getAllPost(page)
-  // for (let nowTopic of allTopic.topicList) {
-  //   await page.waitFor(1000)
-  //   await page.goto(nowTopic.url)
-  //   // await page.waitForNavigation()
-  //   await page.waitForSelector('.m-basepool .j-list')
+
+  // 循环爬取每个主题下的帖子
+  for (let nowTopic of allTopic.topicList) {
+    await page.waitFor(1000)
+    await page.goto(nowTopic.url)
+    // await page.waitForNavigation()
+    await page.waitForSelector('.m-basepool .j-list')
   
-  //   let allPost = await getAllPost(page)
-  //   nowTopic.children = allPost
+    let allPost = await getAllPost(page)
+    nowTopic.children = allPost
   
-  //   newList.push(nowTopic)
-  // }
-  // console.log(newList);
+    newList.push(nowTopic)
+  }
+  
+  allTopic.topicList = newList
+    
+  // 将最终数据写入 data.json
+  console.log(newList.length)
+  fs.unlinkSync('data.json')
+  await page.waitFor(1000)
+  fs.writeFileSync('data.json', JSON.stringify(allTopic))
   
   // 关闭浏览器实例
-  // await browser.close()
+  await browser.close()
 })();
 
 // 爬取当页所有标题
@@ -106,6 +113,8 @@ const getAllTopic = async (page) => {
   }
   
   // 将话题总列表写入文件
+  fs.unlinkSync('titleList.json')
+  await page.waitFor(1000)
   fs.writeFileSync('titleList.json', JSON.stringify(titleList))
   console.log(`讨论主题爬取完成，总共${pageCount}页！共有数据${titleList.length}条！`)
 
@@ -204,6 +213,7 @@ const getAllPost = async (page) => {
   // 总页数
   let pageCount = 1
   
+  await page.waitForSelector('.znxt')
   // 读取该页获取帖子信息
   // 第一页直接读取
   allPostList = allPostList.concat(await getNowPagePost(page))
@@ -212,6 +222,7 @@ const getAllPost = async (page) => {
   const btnList = await page.$$('.znxt')
   const nextBtn = await btnList[btnList.length-1]
   let nextBtnClass = await page.$$eval('.znxt', btnList => btnList[btnList.length-1].className.split(' '))
+  
 
   // 如果下一页还可以按的话就按下一页
   while(!nextBtnClass.includes('js-disabled')) {
@@ -220,6 +231,7 @@ const getAllPost = async (page) => {
     await page.waitFor(1000)
 
     allPostList = allPostList.concat(await getNowPagePost(page))
+    
     pageCount++
     nextBtnClass = await page.$$eval('.znxt', btnList => btnList[btnList.length-1].className.split(' '))
   }
