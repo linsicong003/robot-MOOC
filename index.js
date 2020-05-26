@@ -71,6 +71,7 @@ const puppeteer = require('puppeteer');
 
 // 爬取当页所有标题
 const getNowPageTopic = async (page, list) => {
+  // 公共主题
   let txt = await page.$$eval('.u-forumlistwrap .u-forumli', list => {
     return list.map( one => {
       const title = one.querySelector('.j-link')
@@ -84,6 +85,7 @@ const getNowPageTopic = async (page, list) => {
       }
     })
   });
+
   return list.concat(txt)
 }
 
